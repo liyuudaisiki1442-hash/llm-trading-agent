@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     # Core
     TRADING_MODE: str = Field(default="paper", description="paper or live")
-    SYMBOLS: str = Field(default="BTCUSDT,ETHUSDT,SOLUSDT")
+    SYMBOL: str = Field(default="BTCUSDT")
 
     # Paper Trading
     PAPER_INITIAL_BALANCE: float = Field(default=10000.0)
@@ -34,9 +34,5 @@ class Settings(BaseSettings):
 
     # DB
     DATABASE_URL: str = Field(default="sqlite:///trading_agent.db")
-
-    @property
-    def symbol_list(self) -> List[str]:
-        return [s.strip() for s in self.SYMBOLS.split(",") if s.strip()]
 
 settings = Settings()

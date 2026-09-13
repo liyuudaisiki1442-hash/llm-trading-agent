@@ -27,11 +27,20 @@ class DecisionValidator:
             if not decision.entry_zone:
                 return False, "Entry zone is required for LONG/SHORT."
 
-            # Stop loss logic checks
-            current_price = context.tf_5m.current_price
-            if decision.action == "LONG" and decision.stop_loss >= current_price:
-                return False, f"LONG stop loss ({decision.stop_loss}) must be below current price ({current_price})."
-            if decision.action == "SHORT" and decision.stop_loss <= current_price:
-                return False, f"SHORT stop loss ({decision.stop_loss}) must be above current price ({current_price})."
+            # TP/SL direction checks
+            # entry zone should be checked in executor, but let's check SL and TP vs entry zone
+            entry_mid = (decision.entry_zone.low + decision.entry_zone.high) / 2.0
+            tp = decision.take_profit_targets[0]
+            sl = decision.stop_loss
+
+            if decision.entry_zone.low > decision.entry_zone.high:
+                return False, "Entry zone low must be <= entry zone high."
+
+            if decision.action == "LONG":
+                if not (sl < entry_mid < tp):
+                    return False, f"LONG requires Stop Loss ({sl}) < Entry Zone < Take Profit ({tp})."
+            elif decision.action == "SHORT":
+                if not (tp < entry_mid < sl):
+                    return False, f"SHORT requires Take Profit ({tp}) < Entry Zone < Stop Loss ({sl})."
 
         return True, ""

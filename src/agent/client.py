@@ -62,5 +62,7 @@ class LLMClient:
 
             await asyncio.sleep(2 ** attempt)
 
-        logger.error("Failed to get valid decision from LLM after retries. Defaulting to WAIT/HOLD.")
+        logger.error("Failed to get valid decision from LLM after retries.")
+        # We explicitly return None rather than fabricating a "WAIT" or "HOLD" decision.
+        # Fabricating decisions can corrupt strict semantic action flows.
         return None

@@ -12,7 +12,7 @@ services:
     environment:
       - DATABASE_URL=sqlite:////app/data/trading_agent.db
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep src.main || exit 1"]
+      test: ["CMD-SHELL", "test -f /tmp/health && test $$(expr $$(date +%s) - $$(cat /tmp/health | cut -d. -f1)) -lt 60 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -6,12 +6,8 @@ from src.storage.models import Base
 from src.config.settings import settings
 
 # Setup clean DB for tests
-Base.metadata.drop_all(bind=engine)
-Base.metadata.create_all(bind=engine)
 
 def test_entry_zone_behavior():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     executor = LocalPaperExecutor(initial_balance=10000)
 
@@ -39,8 +35,6 @@ def test_entry_zone_behavior():
     assert executor.pending_setup is None
 
 def test_entry_zone_expiry():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     executor = LocalPaperExecutor(initial_balance=10000)
     params = {
@@ -65,8 +59,6 @@ def test_entry_zone_expiry():
     assert executor.position is None
 
 def test_no_fake_liquidation():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     executor = LocalPaperExecutor(initial_balance=10000)
     params = {
@@ -92,8 +84,6 @@ def test_no_fake_liquidation():
     assert executor.position["unrealized_pnl"] < -4500
 
 def test_state_persistence_across_restarts():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     executor1 = LocalPaperExecutor(initial_balance=10000)
     params = {

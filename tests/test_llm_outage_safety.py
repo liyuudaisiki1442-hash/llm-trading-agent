@@ -8,8 +8,6 @@ from src.storage.models import Base
 
 @pytest.mark.asyncio
 async def test_llm_outage_safety_path():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     bot = TradingBot()
     # Mock LLM out

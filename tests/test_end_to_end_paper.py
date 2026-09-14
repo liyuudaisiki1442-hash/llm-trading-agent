@@ -9,8 +9,6 @@ from src.storage.database import engine
 from src.storage.models import Base
 
 def test_end_to_end_paper_execution():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     # 1. Provide Context
     ctx = MarketContext(
@@ -48,10 +46,11 @@ def test_end_to_end_paper_execution():
     is_appr, r_reason, params = rm.calculate_position(dec, ctx, account_balance=10000)
     assert is_appr, f"Risk rejected: {r_reason}"
 
-    # Quantity logic: Entry mid=50000, SL=49000 -> Risk=1000
-    # Quantity = 100 / 1000 = 0.1
-    # Leverage required = (0.1 * 50000) / 10000 = 0.5 -> clamped to 1.0
-    assert params["quantity"] == 0.1
+    # Quantity logic: Entry is worst case for LONG (highest in zone) = 50100
+    # SL = 49000 -> Risk = 1100
+    # Quantity = 100 / 1100 = 0.09090909
+    # Leverage required = (0.09 * 50100) / 10000 = 0.45 -> clamped to 1.0
+    assert abs(params["quantity"] - (100.0/1100.0)) < 0.0001
     assert params["leverage"] == 1.0
 
     # 5. Local Executor
@@ -67,7 +66,7 @@ def test_end_to_end_paper_execution():
     assert executor.pending_setup is None
     assert executor.position is not None
     assert executor.position["side"] == "LONG"
-    assert executor.position["quantity"] == 0.1
+    assert abs(executor.position["quantity"] - (100.0/1100.0)) < 0.0001
 
     # 6. Tick to Stop Loss
     executor.update_price(48999)

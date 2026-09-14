@@ -58,26 +58,29 @@ def test_risk_manager_deterministic_rr():
         tf_5m=TimeframeContext(timeframe="5M", trend="UP", current_price=50000), # Current Price = 50000
     )
 
-    # 1:2 R/R Long (Risk 1000, Reward 2000)
+    # R/R Long based on worst case entry (high of zone)
+    # Zone high: 50000, SL: 49000 -> Risk: 1000
+    # TP: 52000 -> Reward: 2000
+    # R/R = 2000 / 1000 = 2.0
     dec_good = TradeDecision(
         action="LONG",
         reasoning_summary="test",
         stop_loss=49000,
         take_profit_targets=[52000],
-        entry_zone={"low": 49500, "high": 50500}
+        entry_zone={"low": 49500, "high": 50000}
     )
 
     is_approved, _, params = rm.calculate_position(dec_good, ctx, 10000)
     assert is_approved
     assert params["risk_reward"] == 2.0
 
-    # 1:0.5 R/R Long (Risk 1000, Reward 500) - Should reject (< 1.0)
+    # R/R Long (Risk 1000, Reward 500) - Should reject (< 1.0)
     dec_bad = TradeDecision(
         action="LONG",
         reasoning_summary="test",
         stop_loss=49000,
         take_profit_targets=[50500],
-        entry_zone={"low": 49500, "high": 50500}
+        entry_zone={"low": 49500, "high": 50000}
     )
 
     is_approved, reason, _ = rm.calculate_position(dec_bad, ctx, 10000)

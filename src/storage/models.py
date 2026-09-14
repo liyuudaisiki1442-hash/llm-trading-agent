@@ -38,6 +38,13 @@ class Trade(Base):
     trading_fees = Column(Float, nullable=True)
     status = Column(String) # OPEN, CLOSED
 
+class AccountSnapshot(Base):
+    __tablename__ = "account_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(DateTime, default=datetime.utcnow, unique=True, index=True) # Start of UTC day
+    equity = Column(Float)
+
 class Position(Base):
     __tablename__ = "positions"
 

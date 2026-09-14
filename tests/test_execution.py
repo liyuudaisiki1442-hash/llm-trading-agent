@@ -40,8 +40,6 @@ def test_paper_executor_lifecycle():
 def test_paper_executor_stop_loss():
     from src.storage.database import engine
     from src.storage.models import Base
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
     exec = LocalPaperExecutor(initial_balance=10000)
 
     params = {

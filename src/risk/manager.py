@@ -5,7 +5,7 @@ from typing import Dict, Any, Tuple
 
 from datetime import datetime
 from src.storage.database import SessionLocal
-from src.storage.models import Trade
+from src.storage.models import Trade, AccountSnapshot
 
 class RiskManager:
     def __init__(self, config=settings):
@@ -13,7 +13,7 @@ class RiskManager:
         self.risk_per_trade = config.RISK_PER_TRADE
         self.max_positions = 1 # explicitly enforce single position for v1
         self.max_daily_loss_pct = config.MAX_DAILY_LOSS
-        self.min_first_obstacle_r = 1.0 # configurable threshold
+        self.min_first_obstacle_r = getattr(config, "MIN_FIRST_OBSTACLE_R", 1.0)
 
     def _check_daily_loss(self, account_balance: float) -> Tuple[bool, str]:
         """Check if max daily loss is reached based on UTC day."""
@@ -28,9 +28,11 @@ class RiskManager:
 
             daily_pnl = sum(t.realized_pnl for t in trades if t.exit_timestamp and t.exit_timestamp.date() == today)
 
-            # Simple assumption: balance at start of day was roughly (account_balance - daily_pnl)
-            # A more robust system would save daily equity snapshots.
-            start_of_day_equity = account_balance - daily_pnl
+            # Use the explicitly saved start-of-day equity snapshot
+            today_dt = datetime(today.year, today.month, today.day)
+            snapshot = db.query(AccountSnapshot).filter(AccountSnapshot.date == today_dt).first()
+
+            start_of_day_equity = snapshot.equity if snapshot else account_balance
             if start_of_day_equity <= 0:
                 start_of_day_equity = account_balance # fallback
 
@@ -59,10 +61,13 @@ class RiskManager:
         if not can_trade:
             return False, loss_reason, {}
 
-        # The entry logic will use the entry_zone. The executor will wait for the price to hit this zone.
-        # We calculate risk assuming an entry at the worst-case edge of the zone to be conservative,
-        # or the mid-point. Let's use mid-point for sizing.
-        entry_price = (decision.entry_zone.low + decision.entry_zone.high) / 2.0
+        # Risk sizing must use the worst-case executable fill price from the entry zone
+        # LONG worst case entry = highest price in zone
+        # SHORT worst case entry = lowest price in zone
+        if decision.action == "LONG":
+            entry_price = decision.entry_zone.high
+        else:
+            entry_price = decision.entry_zone.low
 
         stop_loss = decision.stop_loss
         take_profit = decision.take_profit_targets[0] # primary target
@@ -103,22 +108,26 @@ class RiskManager:
 
         position_value = quantity * entry_price
 
+        # Approximate the fee buffer so the executor doesn't reject it due to entry fee + margin exceeding balance.
+        # Taker fee is typically 0.0004, so 0.04% for entry and 0.04% for exit (worst case approx).
+        # We'll leave a 0.5% margin buffer overall.
+        buffer_ratio = 1.005
+        effective_balance_for_margin = account_balance / buffer_ratio
+
         # Max Notional Exposure bounding
-        max_notional = account_balance * self.max_leverage
+        max_notional = effective_balance_for_margin * self.max_leverage
 
         if position_value > max_notional:
             position_value = max_notional
             quantity = position_value / entry_price
 
-            # Recalculate risk to ensure we didn't increase it (we shouldn't have)
+            # Recalculate risk to ensure we didn't increase it
             new_risk_amount = quantity * risk_per_unit
             if new_risk_amount > risk_amount:
                 return False, "Cannot satisfy both max leverage and max risk limits.", {}
 
         # Required leverage for THIS position to satisfy margin requirement
-        # If position_value <= account_balance, we use 1x leverage.
-        # Otherwise we use the minimum leverage needed (up to max_leverage).
-        required_leverage = position_value / account_balance
+        required_leverage = position_value / effective_balance_for_margin
         actual_leverage = max(1.0, min(required_leverage, float(self.max_leverage)))
 
         execution_params = {

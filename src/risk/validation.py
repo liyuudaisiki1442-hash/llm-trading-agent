@@ -36,11 +36,21 @@ class DecisionValidator:
             if decision.entry_zone.low > decision.entry_zone.high:
                 return False, "Entry zone low must be <= entry zone high."
 
+            z_low = decision.entry_zone.low
+            z_high = decision.entry_zone.high
+
             if decision.action == "LONG":
-                if not (sl < entry_mid < tp):
-                    return False, f"LONG requires Stop Loss ({sl}) < Entry Zone < Take Profit ({tp})."
+                if not (sl < z_low and z_high < tp):
+                    return False, f"LONG requires Stop Loss ({sl}) < entire Entry Zone ({z_low}-{z_high}) < Take Profit ({tp})."
             elif decision.action == "SHORT":
-                if not (tp < entry_mid < sl):
-                    return False, f"SHORT requires Take Profit ({tp}) < Entry Zone < Stop Loss ({sl})."
+                if not (tp < z_low and z_high < sl):
+                    return False, f"SHORT requires Take Profit ({tp}) < entire Entry Zone ({z_low}-{z_high}) < Stop Loss ({sl})."
+
+            # Additional First Obstacle logical direction validation
+            if decision.first_obstacle is not None:
+                if decision.action == "LONG" and decision.first_obstacle <= z_high:
+                    return False, f"LONG requires first obstacle ({decision.first_obstacle}) > Entry Zone High ({z_high})."
+                if decision.action == "SHORT" and decision.first_obstacle >= z_low:
+                    return False, f"SHORT requires first obstacle ({decision.first_obstacle}) < Entry Zone Low ({z_low})."
 
         return True, ""

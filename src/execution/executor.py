@@ -4,7 +4,7 @@ from src.config.settings import settings
 from src.monitoring.logging import logger
 
 from src.storage.database import SessionLocal
-from src.storage.models import Trade, Position
+from src.storage.models import Trade, Position, AccountSnapshot
 from datetime import datetime
 
 class LocalPaperExecutor:
@@ -27,14 +27,25 @@ class LocalPaperExecutor:
     def _load_state(self):
         db = SessionLocal()
         try:
-            # Reconstruct balance from realized PnL
-            trades = db.query(Trade).filter(Trade.status == "CLOSED", Trade.realized_pnl != None).all()
-            for t in trades:
-                self.realized_pnl += t.realized_pnl
+            # Initialize or retrieve today's snapshot
+            today = datetime.utcnow().date()
+            today_dt = datetime(today.year, today.month, today.day)
 
-            # Simple assumption: balance = initial + realized_pnl
-            self.balance = settings.PAPER_INITIAL_BALANCE + self.realized_pnl
+            # Reconstruct balance from realized PnL
+            # A more robust approach would be to track equity permanently, but for v1 paper trading
+            # we sum up all closed trades to find the current balance.
+            trades = db.query(Trade).filter(Trade.status == "CLOSED", Trade.realized_pnl != None).all()
+            total_pnl = sum(t.realized_pnl for t in trades)
+            self.realized_pnl = total_pnl
+
+            self.balance = settings.PAPER_INITIAL_BALANCE + total_pnl
             self.available_balance = self.balance
+
+            snapshot = db.query(AccountSnapshot).filter(AccountSnapshot.date == today_dt).first()
+            if not snapshot:
+                snapshot = AccountSnapshot(date=today_dt, equity=self.balance)
+                db.add(snapshot)
+                db.commit()
 
             # Restore active position if exists
             db_pos = db.query(Position).first()
@@ -94,10 +105,12 @@ class LocalPaperExecutor:
 
         position_value = quantity * entry_price
         fee = position_value * self.fee_rate
+
+        # We must re-verify if margin + fee fits within available balance at this actual entry price
         margin_required = position_value / leverage if leverage > 0 else position_value
 
         if margin_required + fee > self.available_balance:
-            logger.error(f"Insufficient paper balance to execute {side} {quantity} {symbol}.")
+            logger.error(f"Insufficient paper balance to execute {side} {quantity} {symbol} at {entry_price}. Margin required: {margin_required}, Fee: {fee}, Available: {self.available_balance}")
             self.pending_setup = None
             return
 

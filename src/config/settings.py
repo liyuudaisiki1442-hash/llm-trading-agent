@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     RISK_PER_TRADE: float = Field(default=0.01)
     MAX_POSITIONS: int = Field(default=1)
     MAX_DAILY_LOSS: float = Field(default=0.05)
+    MIN_FIRST_OBSTACLE_R: float = Field(default=1.0)
 
     # DB
     DATABASE_URL: str = Field(default="sqlite:///trading_agent.db")

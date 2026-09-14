@@ -69,7 +69,7 @@ async def test_binance_ws_url_and_1h():
     # Verify connection URL is the current official one, not old /ws
     mock_connect.assert_called_once()
     actual_url = mock_connect.call_args[0][0]
-    assert "wss://fstream.binance.com/stream?streams=" in actual_url
+    assert "wss://fstream.binance.com/market/stream?streams=" in actual_url
     assert "/ws" not in actual_url # Old path should not exist
 
     # Verify 1h mapped correctly

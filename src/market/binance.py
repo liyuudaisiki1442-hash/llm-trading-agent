@@ -7,7 +7,7 @@ from src.market.exchange import ExchangeMarketData, ExchangeExecution
 from src.monitoring.logging import logger
 
 class BinanceMarketDataAdapter(ExchangeMarketData):
-    def __init__(self, base_url: str = "https://fapi.binance.com", ws_url: str = "wss://fstream.binance.com/stream?streams="):
+    def __init__(self, base_url: str = "https://fapi.binance.com", ws_url: str = "wss://fstream.binance.com/market/stream?streams="):
         self.base_url = base_url
         self.ws_url = ws_url
         self.client = httpx.AsyncClient(timeout=10.0)

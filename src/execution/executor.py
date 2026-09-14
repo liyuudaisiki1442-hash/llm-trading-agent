@@ -166,11 +166,36 @@ class LocalPaperExecutor:
         self.pending_setup = None
         logger.info(f"PAPER EXECUTED: {side} {quantity} {symbol} @ {entry_price} (SL: {stop_loss}, TP: {take_profit})")
 
+    def _check_and_rollover_daily_snapshot(self):
+        """Check if UTC day changed and insert new snapshot if necessary."""
+        today = datetime.utcnow().date()
+
+        # In-memory cache to prevent DB hit on every tick
+        if getattr(self, "_last_snapshot_date", None) == today:
+            return
+
+        db = SessionLocal()
+        try:
+            today_dt = datetime(today.year, today.month, today.day)
+            snapshot = db.query(AccountSnapshot).filter(AccountSnapshot.date == today_dt).first()
+            if not snapshot:
+                snapshot = AccountSnapshot(date=today_dt, equity=self.balance)
+                db.add(snapshot)
+                db.commit()
+                logger.info(f"Created new daily account snapshot for {today}: {self.balance:.2f}")
+
+            self._last_snapshot_date = today
+        except Exception as e:
+            logger.error(f"Failed to check/create daily account snapshot: {e}")
+        finally:
+            db.close()
+
     def update_price(self, current_price: float):
         """
         Deterministic safety layer triggered on every price update (tick).
         Checks Entry Zones, Stop Loss, and Take Profit.
         """
+        self._check_and_rollover_daily_snapshot()
         if self.pending_setup and not self.position:
             zone = self.pending_setup["entry_zone"]
             if zone["low"] <= current_price <= zone["high"]:
@@ -243,17 +268,26 @@ class LocalPaperExecutor:
         position_value = quantity * current_price
         fee = position_value * self.fee_rate
 
-        # In _open_position we already subtracted the entry fee from balance.
-        # Now we subtract the exit fee from the raw PnL.
-        net_trade_pnl = pnl - fee
+        # entry_fee was already deducted from balance when the position opened
+        # Now we deduct exit fee from the raw PnL
+        # However, to maintain exact ledger accuracy on restarts, we need to report
+        # the FULL net trade PnL (pnl - entry_fee - exit_fee) into DB `realized_pnl`
+        # so that summing realized_pnl during restart exactly reflects total equity changes.
+        entry_fee = (entry * quantity) * self.fee_rate
+        exit_fee = fee
 
-        self.balance += net_trade_pnl
-        self.realized_pnl += net_trade_pnl
+        # The true net PnL of this entire trade lifecycle
+        full_net_pnl = pnl - entry_fee - exit_fee
 
-        # Release margin back to available
+        # Balance only needs raw pnl - exit_fee added back (since entry_fee was already deducted)
+        self.balance += (pnl - exit_fee)
         self.available_balance = self.balance
 
-        logger.info(f"PAPER CLOSED ({reason}): {side} {quantity} @ {current_price}. PnL: {net_trade_pnl:.2f}, New Balance: {self.balance:.2f}")
+        # But we record the full_net_pnl so that `balance = PAPER_INITIAL_BALANCE + sum(realized_pnl)` works properly on restarts
+        self.realized_pnl += full_net_pnl
+        total_trade_fees = entry_fee + exit_fee
+
+        logger.info(f"PAPER CLOSED ({reason}): {side} {quantity} @ {current_price}. Net PnL: {full_net_pnl:.2f}, New Balance: {self.balance:.2f}")
 
         self.trade_history.append({
             "symbol": pos["symbol"],
@@ -261,7 +295,7 @@ class LocalPaperExecutor:
             "entry_price": entry,
             "exit_price": current_price,
             "quantity": quantity,
-            "pnl": net_trade_pnl,
+            "pnl": full_net_pnl,
             "reason": reason
         })
 
@@ -276,8 +310,8 @@ class LocalPaperExecutor:
                 db_trade.status = "CLOSED"
                 db_trade.exit_price = current_price
                 db_trade.exit_timestamp = datetime.utcnow()
-                db_trade.realized_pnl = net_trade_pnl
-                db_trade.trading_fees = fee
+                db_trade.realized_pnl = full_net_pnl
+                db_trade.trading_fees = total_trade_fees
             db.commit()
         except Exception as e:
             logger.error(f"Failed to persist closed position: {e}")

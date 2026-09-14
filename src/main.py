@@ -29,7 +29,7 @@ class TradingBot:
         )
         self.validator = DecisionValidator()
         self.risk_manager = RiskManager()
-        self.executor = LocalPaperExecutor()
+        self.executor = None # Will be initialized after DB creation
 
         self.is_running = False
         self.decision_lock = asyncio.Lock()
@@ -61,6 +61,7 @@ class TradingBot:
 
         # Init DB
         Base.metadata.create_all(bind=engine)
+        self.executor = LocalPaperExecutor()
         self.log_event("STARTUP", f"Started in {settings.TRADING_MODE} mode for {self.primary_symbol}")
 
         # Fetch historical data

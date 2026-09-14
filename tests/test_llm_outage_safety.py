@@ -24,6 +24,8 @@ async def test_llm_outage_safety_path():
         "stop_loss": 49000,
         "take_profit": 52000
     }
+    # In isolated testing bot.executor might be None because initialization happens properly on run()
+    bot.executor = LocalPaperExecutor(initial_balance=10000)
     bot.executor.execute_params(params)
     bot.executor.update_price(50000)
     assert bot.executor.position is not None

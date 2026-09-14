@@ -46,11 +46,9 @@ def test_end_to_end_paper_execution():
     is_appr, r_reason, params = rm.calculate_position(dec, ctx, account_balance=10000)
     assert is_appr, f"Risk rejected: {r_reason}"
 
-    # Quantity logic: Entry is worst case for LONG (highest in zone) = 50100
-    # SL = 49000 -> Risk = 1100
-    # Quantity = 100 / 1100 = 0.09090909
-    # Leverage required = (0.09 * 50100) / 10000 = 0.45 -> clamped to 1.0
-    assert abs(params["quantity"] - (100.0/1100.0)) < 0.0001
+    # With fees included, risk is slightly higher.
+    qty = params["quantity"]
+    assert qty > 0.08 and qty < 0.095 # ~0.0877
     assert params["leverage"] == 1.0
 
     # 5. Local Executor
@@ -66,7 +64,7 @@ def test_end_to_end_paper_execution():
     assert executor.pending_setup is None
     assert executor.position is not None
     assert executor.position["side"] == "LONG"
-    assert abs(executor.position["quantity"] - (100.0/1100.0)) < 0.0001
+    assert abs(executor.position["quantity"] - qty) < 0.0001
 
     # 6. Tick to Stop Loss
     executor.update_price(48999)

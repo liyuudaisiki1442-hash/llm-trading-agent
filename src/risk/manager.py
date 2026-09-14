@@ -73,35 +73,45 @@ class RiskManager:
         take_profit = decision.take_profit_targets[0] # primary target
         first_obstacle = decision.first_obstacle
 
-        # Risk per unit
-        risk_per_unit = abs(entry_price - stop_loss)
-        if risk_per_unit == 0:
+        # Assume a worst-case combined entry+exit fee rate
+        # Typically 0.0004 for taker. Double it to cover both open and close.
+        assumed_fee_rate = 0.0008
+
+        # Risk per unit including estimated fees
+        # We lose the price difference + we pay fees on the entry value and the exit (SL) value
+        price_risk = abs(entry_price - stop_loss)
+        fee_risk = (entry_price * assumed_fee_rate / 2) + (stop_loss * assumed_fee_rate / 2)
+        effective_risk_per_unit = price_risk + fee_risk
+
+        if effective_risk_per_unit == 0:
             return False, "Stop loss equals entry price", {}
 
-        # Reward per unit
-        reward_per_unit = abs(take_profit - entry_price)
+        # Reward per unit (similarly penalize reward by fees)
+        price_reward = abs(take_profit - entry_price)
+        fee_reward = (entry_price * assumed_fee_rate / 2) + (take_profit * assumed_fee_rate / 2)
+        effective_reward_per_unit = price_reward - fee_reward
 
         # Deterministic Risk/Reward
-        rr_ratio = reward_per_unit / risk_per_unit if risk_per_unit > 0 else 0
+        rr_ratio = effective_reward_per_unit / effective_risk_per_unit if effective_risk_per_unit > 0 else 0
         if rr_ratio < 1.0:
             return False, f"Risk/Reward ratio {rr_ratio:.2f} is below 1.0", {}
 
         # First Obstacle check
         if first_obstacle is not None:
             if decision.action == "LONG" and first_obstacle > entry_price:
-                obstacle_reward = first_obstacle - entry_price
-                obstacle_r = obstacle_reward / risk_per_unit
+                obstacle_reward = (first_obstacle - entry_price) - ((entry_price + first_obstacle) * assumed_fee_rate / 2)
+                obstacle_r = obstacle_reward / effective_risk_per_unit
                 if obstacle_r < self.min_first_obstacle_r:
                     return False, f"First obstacle R ({obstacle_r:.2f}) < minimum ({self.min_first_obstacle_r})", {}
             elif decision.action == "SHORT" and first_obstacle < entry_price:
-                obstacle_reward = entry_price - first_obstacle
-                obstacle_r = obstacle_reward / risk_per_unit
+                obstacle_reward = (entry_price - first_obstacle) - ((entry_price + first_obstacle) * assumed_fee_rate / 2)
+                obstacle_r = obstacle_reward / effective_risk_per_unit
                 if obstacle_r < self.min_first_obstacle_r:
                     return False, f"First obstacle R ({obstacle_r:.2f}) < minimum ({self.min_first_obstacle_r})", {}
 
-        # Position Sizing
+        # Position Sizing based on effective risk to honor max risk cap
         risk_amount = account_balance * self.risk_per_trade
-        quantity = risk_amount / risk_per_unit
+        quantity = risk_amount / effective_risk_per_unit
 
         if quantity <= 0:
             return False, "Calculated quantity is zero or negative", {}
@@ -122,7 +132,7 @@ class RiskManager:
             quantity = position_value / entry_price
 
             # Recalculate risk to ensure we didn't increase it
-            new_risk_amount = quantity * risk_per_unit
+            new_risk_amount = quantity * effective_risk_per_unit
             if new_risk_amount > risk_amount:
                 return False, "Cannot satisfy both max leverage and max risk limits.", {}
 

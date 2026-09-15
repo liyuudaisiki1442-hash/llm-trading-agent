@@ -39,11 +39,15 @@ class Trade(Base):
     status = Column(String) # OPEN, CLOSED
 
 class AccountSnapshot(Base):
+    """
+    Records the start-of-day authoritative wallet balance (not equity including unrealized PnL).
+    This is used to determine the MAX_DAILY_LOSS boundary.
+    """
     __tablename__ = "account_snapshots"
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(DateTime, default=datetime.utcnow, unique=True, index=True) # Start of UTC day
-    equity = Column(Float)
+    equity = Column(Float) # Technically this is the Wallet Balance, not True Equity
 
 class Position(Base):
     __tablename__ = "positions"

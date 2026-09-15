@@ -1,16 +1,8 @@
 import pytest
 from src.execution.executor import LocalPaperExecutor
-from src.storage.database import SessionLocal, engine
-from src.storage.models import Base
+from src.storage.database import SessionLocal
 
-@pytest.fixture(autouse=True)
-def clean_db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-def test_single_trade_exact_balance_restore():
+def test_single_trade_exact_balance_restore(isolated_test_db):
     executor1 = LocalPaperExecutor(initial_balance=10000.0)
 
     # Open LONG
@@ -43,7 +35,7 @@ def test_single_trade_exact_balance_restore():
     assert abs(executor2.balance - expected_balance) < 1e-6
     assert executor2.position is None
 
-def test_multi_trade_exact_balance_restore():
+def test_multi_trade_exact_balance_restore(isolated_test_db):
     executor1 = LocalPaperExecutor(initial_balance=10000.0)
 
     # Trade 1: SHORT at 50000, hit TP at 49000

@@ -22,6 +22,7 @@ def isolated_test_db(monkeypatch):
     monkeypatch.setattr(src.execution.executor, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(src.risk.manager, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(src.main, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(src.main, "engine", engine)
     monkeypatch.setattr(src.storage.models, "Base", Base)
 
     yield engine

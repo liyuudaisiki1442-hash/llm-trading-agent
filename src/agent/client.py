@@ -11,7 +11,8 @@ class LLMClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
-        self.client = httpx.AsyncClient(timeout=30.0)
+        timeout = httpx.Timeout(120.0, connect=10.0)
+        self.client = httpx.AsyncClient(timeout=timeout)
 
     async def close(self):
         await self.client.aclose()

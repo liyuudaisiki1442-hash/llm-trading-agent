@@ -18,12 +18,7 @@ class TradingBot:
     def __init__(self):
         self.market_adapter = BinanceMarketDataAdapter()
 
-        self.symbols = settings.symbol_list
-        if not self.symbols:
-             # Default fallback if somehow empty
-             self.symbols = ["BTCUSDT"]
-
-        self.primary_symbol = self.symbols[0]
+        self.primary_symbol = settings.SYMBOL
         self.mtf_state = MultiTimeframeState(self.primary_symbol, limit=settings.HISTORICAL_CANDLE_LIMIT)
         self.context_builder = MarketContextBuilder(llm_candle_context=settings.LLM_CANDLE_CONTEXT)
 
@@ -34,10 +29,18 @@ class TradingBot:
         )
         self.validator = DecisionValidator()
         self.risk_manager = RiskManager()
-        self.executor = LocalPaperExecutor()
+        self.executor = None # Will be initialized after DB creation
 
         self.is_running = False
         self.decision_lock = asyncio.Lock()
+
+    def _touch_health_file(self):
+        """Update health file to prove the main loop and ws are alive."""
+        try:
+            with open("/tmp/health", "w") as f:
+                f.write(str(time.time()))
+        except Exception as e:
+            pass
 
     def log_event(self, event_type: str, message: str):
         db = SessionLocal()
@@ -53,9 +56,12 @@ class TradingBot:
     async def initialize(self):
         setup_logging()
         logger.info(f"Initializing Trading Bot in {settings.TRADING_MODE} mode.")
+        if settings.TRADING_MODE == "live":
+            raise ValueError("Live trading is not implemented/enabled in v1.")
 
         # Init DB
         Base.metadata.create_all(bind=engine)
+        self.executor = LocalPaperExecutor()
         self.log_event("STARTUP", f"Started in {settings.TRADING_MODE} mode for {self.primary_symbol}")
 
         # Fetch historical data
@@ -75,6 +81,9 @@ class TradingBot:
             raise e
 
     async def on_market_update(self, data: dict):
+        # Healthcheck update
+        self._touch_health_file()
+
         if data["type"] == "mark_price":
             price = data["price"]
             self.mtf_state.update_mark_price(price)
@@ -110,7 +119,8 @@ class TradingBot:
                 # 2. Query LLM
                 decision = await self.llm_client.get_decision(context_json)
                 if not decision:
-                    logger.warning("No decision returned, defaulting to WAIT/HOLD.")
+                    logger.warning("No decision returned from LLM. Skipping this cycle.")
+                    # Existing position safety continues via on_market_update -> executor.update_price
                     return
 
                 logger.info(f"LLM Decision: {decision.action} (Conf: {decision.confidence})")

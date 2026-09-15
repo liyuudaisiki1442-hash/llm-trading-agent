@@ -7,7 +7,7 @@ from src.market.exchange import ExchangeMarketData, ExchangeExecution
 from src.monitoring.logging import logger
 
 class BinanceMarketDataAdapter(ExchangeMarketData):
-    def __init__(self, base_url: str = "https://fapi.binance.com", ws_url: str = "wss://fstream.binance.com/ws"):
+    def __init__(self, base_url: str = "https://fapi.binance.com", ws_url: str = "wss://fstream.binance.com/market/stream?streams="):
         self.base_url = base_url
         self.ws_url = ws_url
         self.client = httpx.AsyncClient(timeout=10.0)
@@ -68,7 +68,7 @@ class BinanceMarketDataAdapter(ExchangeMarketData):
             streams.append(f"{s}@markPrice")
 
         stream_name = "/".join(streams)
-        url = f"{self.ws_url.replace('/ws', '/stream?streams=')}{stream_name}"
+        url = f"{self.ws_url}{stream_name}"
 
         while True:
             try:
@@ -79,13 +79,21 @@ class BinanceMarketDataAdapter(ExchangeMarketData):
                         msg = await ws.recv()
                         data = json.loads(msg)
 
-                        if "e" in data:
-                            event_type = data["e"]
+                        # Handle combined streams wrapper
+                        if "stream" in data and "data" in data:
+                            payload = data["data"]
+                        else:
+                            payload = data
+
+                        if "e" in payload:
+                            event_type = payload["e"]
                             if event_type == "kline":
-                                symbol = data["s"]
-                                kline = data["k"]
+                                symbol = payload["s"]
+                                kline = payload["k"]
                                 interval = kline["i"]
-                                tf = "5M" if interval == "5m" else "15M" if interval == "15m" else "1H"
+                                tf = "5M" if interval == "5m" else "15M" if interval == "15m" else "1H" if interval == "1h" else None
+                                if not tf:
+                                    continue
 
                                 candle = {
                                     "type": "candle",
@@ -101,12 +109,12 @@ class BinanceMarketDataAdapter(ExchangeMarketData):
                                 }
                                 await callback(candle)
                             elif event_type == "markPriceUpdate":
-                                symbol = data["s"]
+                                symbol = payload["s"]
                                 update = {
                                     "type": "mark_price",
                                     "symbol": symbol,
-                                    "price": float(data["p"]),
-                                    "timestamp": data["E"]
+                                    "price": float(payload["p"]),
+                                    "timestamp": payload["E"]
                                 }
                                 await callback(update)
             except websockets.exceptions.ConnectionClosedError as e:

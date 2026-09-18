@@ -166,6 +166,45 @@ class LocalPaperExecutor:
         self.pending_setup = None
         logger.info(f"PAPER EXECUTED: {side} {quantity} {symbol} @ {entry_price} (SL: {stop_loss}, TP: {take_profit})")
 
+    def update_stop_loss(self, new_stop: float, current_price: float):
+        if not self.position:
+            return
+
+        pos = self.position
+        side = pos["side"]
+        current_stop = pos["stop_loss"]
+        symbol = pos["symbol"]
+
+        if side == "LONG":
+            if new_stop <= current_stop:
+                logger.info(f"Rejected stop update: {new_stop} is not tighter than current LONG stop {current_stop}.")
+                return
+            if new_stop >= current_price:
+                logger.info(f"Rejected stop update: {new_stop} must be below current price {current_price} for LONG.")
+                return
+        else: # SHORT
+            if new_stop >= current_stop:
+                logger.info(f"Rejected stop update: {new_stop} is not tighter than current SHORT stop {current_stop}.")
+                return
+            if new_stop <= current_price:
+                logger.info(f"Rejected stop update: {new_stop} must be above current price {current_price} for SHORT.")
+                return
+
+        # Accepted
+        self.position["stop_loss"] = new_stop
+
+        db = SessionLocal()
+        try:
+            db_pos = db.query(Position).filter(Position.id == pos["db_id"]).first()
+            if db_pos:
+                db_pos.stop_loss = new_stop
+                db.commit()
+            logger.info(f"PAPER STOP UPDATED: {side} {symbol} {current_stop} -> {new_stop}")
+        except Exception as e:
+            logger.error(f"Failed to persist stop loss update: {e}")
+        finally:
+            db.close()
+
     def _check_and_rollover_daily_snapshot(self):
         """Check if UTC day changed and insert new snapshot if necessary."""
         today = datetime.utcnow().date()

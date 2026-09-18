@@ -157,7 +157,11 @@ class TradingBot:
                     logger.info("Closing position based on LLM decision.")
                     self.executor.close_position(self.mtf_state.mark_price, reason="LLM_CLOSE")
                     return
-                elif decision.action in ["WAIT", "HOLD"]:
+                elif decision.action == "HOLD":
+                    if decision.stop_loss is not None:
+                        self.executor.update_stop_loss(decision.stop_loss, self.mtf_state.mark_price)
+                    return
+                elif decision.action == "WAIT":
                     return # Do nothing
 
                 # 5. Risk Engine for LONG/SHORT

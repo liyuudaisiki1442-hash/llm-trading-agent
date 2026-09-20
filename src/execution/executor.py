@@ -4,7 +4,7 @@ from src.config.settings import settings
 from src.monitoring.logging import logger
 
 from src.storage.database import SessionLocal
-from src.storage.models import Trade, Position, AccountSnapshot
+from src.storage.models import Trade, Position, AccountSnapshot, ActiveTradePlan
 from datetime import datetime
 
 class LocalPaperExecutor:
@@ -22,6 +22,7 @@ class LocalPaperExecutor:
         self.trade_history: List[Dict[str, Any]] = []
 
         self.fee_rate = 0.0004 # 0.04% taker fee approximation
+        self.active_trade_plan: Optional[Dict[str, Any]] = None
         self._load_state()
 
     def _load_state(self):
@@ -69,6 +70,22 @@ class LocalPaperExecutor:
                     "candles_held": 0, # approximation on restart
                     "db_id": db_pos.id
                 }
+
+                plan = db.query(ActiveTradePlan).filter(ActiveTradePlan.symbol == db_pos.symbol).first()
+                if plan:
+                    self.active_trade_plan = {
+                        "side": plan.side,
+                        "setup_type": plan.setup_type,
+                        "entry_reason": plan.entry_reason,
+                        "entry_zone_low": plan.entry_zone_low,
+                        "entry_zone_high": plan.entry_zone_high,
+                        "invalidation_price": plan.invalidation_price,
+                        "original_stop_loss": plan.original_stop_loss,
+                        "original_take_profit": plan.original_take_profit,
+                        "original_first_obstacle": plan.original_first_obstacle,
+                        "market_regime": plan.market_regime,
+                        "created_at": plan.created_at.isoformat()
+                    }
         except Exception as e:
             logger.error(f"Error loading state: {e}")
         finally:
@@ -156,8 +173,39 @@ class LocalPaperExecutor:
             db.add(db_pos)
             db.commit()
 
+            # Persist Active Trade Plan exactly when position is filled
+            db_plan = ActiveTradePlan(
+                symbol=symbol,
+                side=side,
+                setup_type=params.get("setup_type"),
+                entry_reason=params.get("entry_reason"),
+                entry_zone_low=params.get("entry_zone", {}).get("low"),
+                entry_zone_high=params.get("entry_zone", {}).get("high"),
+                invalidation_price=params.get("invalidation_price"),
+                original_stop_loss=stop_loss,
+                original_take_profit=take_profit,
+                original_first_obstacle=params.get("first_obstacle"),
+                market_regime=params.get("market_regime")
+            )
+            db.add(db_plan)
+            db.commit()
+
             self.position["db_id"] = db_pos.id
             self.position["trade_id"] = db_trade.id
+            self.active_trade_plan = {
+                "side": side,
+                "setup_type": db_plan.setup_type,
+                "entry_reason": db_plan.entry_reason,
+                "entry_zone_low": db_plan.entry_zone_low,
+                "entry_zone_high": db_plan.entry_zone_high,
+                "invalidation_price": db_plan.invalidation_price,
+                "original_stop_loss": db_plan.original_stop_loss,
+                "original_take_profit": db_plan.original_take_profit,
+                "original_first_obstacle": db_plan.original_first_obstacle,
+                "market_regime": db_plan.market_regime,
+                "created_at": db_plan.created_at.isoformat()
+            }
+
         except Exception as e:
             logger.error(f"Failed to persist new position: {e}")
         finally:
@@ -352,6 +400,11 @@ class LocalPaperExecutor:
             if db_pos:
                 db.delete(db_pos)
 
+            # Cleanup Active Trade Plan when closed
+            db_plan = db.query(ActiveTradePlan).filter(ActiveTradePlan.symbol == pos["symbol"]).first()
+            if db_plan:
+                db.delete(db_plan)
+
             db_trade = db.query(Trade).filter(Trade.status == "OPEN").first()
             if db_trade:
                 db_trade.status = "CLOSED"
@@ -366,6 +419,7 @@ class LocalPaperExecutor:
             db.close()
 
         self.position = None
+        self.active_trade_plan = None
 
     def increment_candle_age(self):
         if self.position:

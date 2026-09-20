@@ -49,6 +49,23 @@ class AccountSnapshot(Base):
     date = Column(DateTime, default=datetime.utcnow, unique=True, index=True) # Start of UTC day
     equity = Column(Float) # Technically this is the Wallet Balance, not True Equity
 
+class ActiveTradePlan(Base):
+    __tablename__ = "active_trade_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, unique=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    side = Column(String)
+    setup_type = Column(String, nullable=True)
+    entry_reason = Column(String, nullable=True)
+    entry_zone_low = Column(Float, nullable=True)
+    entry_zone_high = Column(Float, nullable=True)
+    invalidation_price = Column(Float, nullable=True)
+    original_stop_loss = Column(Float, nullable=True)
+    original_take_profit = Column(Float, nullable=True)
+    original_first_obstacle = Column(Float, nullable=True)
+    market_regime = Column(String, nullable=True)
+
 class Position(Base):
     __tablename__ = "positions"
 

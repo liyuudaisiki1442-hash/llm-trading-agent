@@ -111,9 +111,40 @@ class TradingBot:
             try:
                 logger.info("--- Starting LLM Decision Cycle ---")
 
+                # Fetch recent decisions from DB (last 5)
+                db = SessionLocal()
+                try:
+                    db_decisions = db.query(Decision).filter(
+                        Decision.symbol == self.primary_symbol
+                    ).order_by(Decision.timestamp.desc()).limit(5).all()
+
+                    # Reverse so they are chronological (oldest to newest)
+                    db_decisions.reverse()
+
+                    recent_decisions = []
+                    for d in db_decisions:
+                        recent_decisions.append({
+                            "timestamp": d.timestamp.isoformat() if d.timestamp else "",
+                            "action": d.action,
+                            "confidence": float(d.confidence) if d.confidence else 0.0,
+                            "setup_type": d.setup_type,
+                            "entry_zone_low": d.entry_zone_low,
+                            "entry_zone_high": d.entry_zone_high,
+                            "invalidation_price": d.invalidation_price,
+                            "first_obstacle": d.first_obstacle,
+                            "reasoning_summary": d.reasoning_summary if d.reasoning_summary else ""
+                        })
+                except Exception as e:
+                    logger.error(f"Failed to fetch recent decisions: {e}")
+                    recent_decisions = []
+                finally:
+                    db.close()
+
                 # 1. Build Context
                 current_position = self.executor.get_position()
-                context = self.context_builder.build_context(self.mtf_state, current_position)
+                active_plan = self.executor.active_trade_plan if current_position else None
+
+                context = self.context_builder.build_context(self.mtf_state, current_position, active_plan, recent_decisions)
                 context_json = context.model_dump_json(indent=2)
 
                 # 2. Query LLM

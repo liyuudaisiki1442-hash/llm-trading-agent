@@ -29,9 +29,35 @@ class TimeframeContext(BaseModel):
     nearest_resistance: Optional[float] = None
     recent_closed_candles: List[Dict[str, Any]] = Field(default_factory=list)
 
+class RecentDecisionContext(BaseModel):
+    timestamp: str
+    action: str
+    confidence: float
+    setup_type: Optional[str]
+    entry_zone_low: Optional[float]
+    entry_zone_high: Optional[float]
+    invalidation_price: Optional[float]
+    first_obstacle: Optional[float]
+    reasoning_summary: str
+
+class ActiveTradePlanContext(BaseModel):
+    side: str
+    setup_type: Optional[str]
+    entry_reason: Optional[str]
+    entry_zone_low: Optional[float]
+    entry_zone_high: Optional[float]
+    invalidation_price: Optional[float]
+    original_stop_loss: Optional[float]
+    original_take_profit: Optional[float]
+    original_first_obstacle: Optional[float]
+    market_regime: Optional[str]
+    created_at: str
+
 class MarketContext(BaseModel):
     symbol: str
     position_state: PositionState
+    recent_decisions: List[RecentDecisionContext] = Field(default_factory=list)
+    active_trade_plan: Optional[ActiveTradePlanContext] = None
     tf_1h: TimeframeContext
     tf_15m: TimeframeContext
     tf_5m: TimeframeContext
@@ -89,7 +115,7 @@ class MarketContextBuilder:
             recent_closed_candles=recent_candles
         )
 
-    def build_context(self, state: MultiTimeframeState, position: Optional[Dict[str, Any]] = None) -> MarketContext:
+    def build_context(self, state: MultiTimeframeState, position: Optional[Dict[str, Any]] = None, active_trade_plan: Optional[Dict[str, Any]] = None, recent_decisions: List[Dict[str, Any]] = None) -> MarketContext:
         pos_state = PositionState()
         if position:
             pos_state = PositionState(
@@ -110,9 +136,19 @@ class MarketContextBuilder:
         ctx_15m = self._build_tf_context("15M", state.get_dataframe("15M"), current_price)
         ctx_5m = self._build_tf_context("5M", state.get_dataframe("5M"), current_price)
 
+        plan_ctx = None
+        if active_trade_plan:
+            plan_ctx = ActiveTradePlanContext(**active_trade_plan)
+
+        recent_ctxs = []
+        if recent_decisions:
+            recent_ctxs = [RecentDecisionContext(**d) for d in recent_decisions]
+
         return MarketContext(
             symbol=state.symbol,
             position_state=pos_state,
+            recent_decisions=recent_ctxs,
+            active_trade_plan=plan_ctx,
             tf_1h=ctx_1h,
             tf_15m=ctx_15m,
             tf_5m=ctx_5m

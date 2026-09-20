@@ -131,22 +131,6 @@ class LocalPaperExecutor:
             self.pending_setup = None
             return
 
-        self.balance -= fee
-        self.available_balance -= (margin_required + fee)
-
-        self.position = {
-            "symbol": symbol,
-            "side": side,
-            "quantity": quantity,
-            "entry_price": entry_price,
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
-            "leverage": leverage,
-            "margin": margin_required,
-            "unrealized_pnl": -fee,
-            "candles_held": 0
-        }
-
         db = SessionLocal()
         try:
             db_trade = Trade(
@@ -157,8 +141,6 @@ class LocalPaperExecutor:
                 leverage=leverage,
                 status="OPEN"
             )
-            db.add(db_trade)
-            db.commit()
 
             db_pos = Position(
                 symbol=symbol,
@@ -170,10 +152,7 @@ class LocalPaperExecutor:
                 take_profit=take_profit,
                 unrealized_pnl=-fee
             )
-            db.add(db_pos)
-            db.commit()
 
-            # Persist Active Trade Plan exactly when position is filled
             db_plan = ActiveTradePlan(
                 symbol=symbol,
                 side=side,
@@ -187,11 +166,33 @@ class LocalPaperExecutor:
                 original_first_obstacle=params.get("first_obstacle"),
                 market_regime=params.get("market_regime")
             )
+
+            db.add(db_trade)
+            db.add(db_pos)
             db.add(db_plan)
+
+            db.flush() # Populate IDs without committing yet
             db.commit()
 
-            self.position["db_id"] = db_pos.id
-            self.position["trade_id"] = db_trade.id
+            # Now that commit is successful, update in-memory state
+            self.balance -= fee
+            self.available_balance -= (margin_required + fee)
+
+            self.position = {
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "leverage": leverage,
+                "margin": margin_required,
+                "unrealized_pnl": -fee,
+                "candles_held": 0,
+                "db_id": db_pos.id,
+                "trade_id": db_trade.id
+            }
+
             self.active_trade_plan = {
                 "side": side,
                 "setup_type": db_plan.setup_type,
@@ -206,13 +207,15 @@ class LocalPaperExecutor:
                 "created_at": db_plan.created_at.isoformat()
             }
 
+            self.pending_setup = None
+            logger.info(f"PAPER EXECUTED: {side} {quantity} {symbol} @ {entry_price} (SL: {stop_loss}, TP: {take_profit})")
+
         except Exception as e:
-            logger.error(f"Failed to persist new position: {e}")
+            db.rollback()
+            logger.error(f"Failed to persist new position, aborting execution: {e}")
+            # Memory state remains unchanged, position is not opened.
         finally:
             db.close()
-
-        self.pending_setup = None
-        logger.info(f"PAPER EXECUTED: {side} {quantity} {symbol} @ {entry_price} (SL: {stop_loss}, TP: {take_profit})")
 
     def update_stop_loss(self, new_stop: float, current_price: float):
         if not self.position:

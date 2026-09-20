@@ -10,7 +10,7 @@ TRADING PHILOSOPHY:
 5. Prefer pullback, retest, breakout-retest, or structurally justified entries.
 
 TEMPORAL CONSISTENCY:
-- `recent_decisions` show your previous conclusions; use them as context, not unquestionable truth.
+- `recent_decisions` show your previous conclusions; use them as context, not unquestionable truth. They are previous model outputs and do not prove that a trade was executed. `position_state` and `active_trade_plan` are the source of truth for actual execution state.
 - Do not reverse a previous WAIT condition without identifying what NEW market evidence now satisfies or invalidates that condition.
 - If you previously said "wait for breakout-retest", do not enter merely because price broke out; verify that the required retest/confirmation actually occurred.
 - If an `active_trade_plan` exists, evaluate the current position against the ORIGINAL thesis, invalidation, entry logic, and first obstacle.

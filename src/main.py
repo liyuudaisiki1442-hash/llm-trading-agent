@@ -111,12 +111,39 @@ class TradingBot:
             try:
                 logger.info("--- Starting LLM Decision Cycle ---")
 
-                # 1. Build Context
+                # 1. Fetch recent decisions for temporal memory
+                db = SessionLocal()
+                try:
+                    db_recent_decisions = db.query(Decision).filter(
+                        Decision.symbol == self.primary_symbol,
+                        Decision.is_valid == True
+                    ).order_by(Decision.id.desc()).limit(5).all()
+
+                    recent_decisions = []
+                    # Reverse to chronological order (oldest first, newest last)
+                    for d in reversed(db_recent_decisions):
+                        recent_decisions.append({
+                            "action": d.action,
+                            "setup_type": d.setup_type,
+                            "reasoning_summary": d.reasoning_summary,
+                            "timestamp": d.timestamp.isoformat()
+                        })
+                finally:
+                    db.close()
+
+                # 2. Build Context
                 current_position = self.executor.get_position()
-                context = self.context_builder.build_context(self.mtf_state, current_position)
+                active_trade_plan = self.executor.active_trade_plan if current_position else None
+
+                context = self.context_builder.build_context(
+                    state=self.mtf_state,
+                    position=current_position,
+                    active_trade_plan=active_trade_plan,
+                    recent_decisions=recent_decisions
+                )
                 context_json = context.model_dump_json(indent=2)
 
-                # 2. Query LLM
+                # 3. Query LLM
                 decision = await self.llm_client.get_decision(context_json)
                 if not decision:
                     logger.warning("No decision returned from LLM. Skipping this cycle.")

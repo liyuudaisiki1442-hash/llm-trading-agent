@@ -29,6 +29,6 @@ def test_context_json_active_plan():
 
     ctx_open = builder.build_context(state, position={"side": "LONG"}, active_trade_plan=active_plan_mock)
     assert ctx_open.active_trade_plan is not None
-    assert ctx_open.active_trade_plan.setup_type == "Breakout"
+    assert ctx_open.active_trade_plan["setup_type"] == "Breakout"
     json_open = ctx_open.model_dump_json()
     assert '"active_trade_plan":{"side":"LONG","setup_type":"Breakout"' in json_open

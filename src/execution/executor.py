@@ -18,11 +18,11 @@ class LocalPaperExecutor:
 
         # Position state tracking
         self.position: Optional[Dict[str, Any]] = None
+        self.active_trade_plan: Optional[Dict[str, Any]] = None
         self.realized_pnl = 0.0
         self.trade_history: List[Dict[str, Any]] = []
 
         self.fee_rate = 0.0004 # 0.04% taker fee approximation
-        self.active_trade_plan: Optional[Dict[str, Any]] = None
         self._load_state()
 
     def _load_state(self):
@@ -71,21 +71,22 @@ class LocalPaperExecutor:
                     "db_id": db_pos.id
                 }
 
-                plan = db.query(ActiveTradePlan).filter(ActiveTradePlan.symbol == db_pos.symbol).first()
-                if plan:
+                db_plan = db.query(ActiveTradePlan).filter(ActiveTradePlan.symbol == db_pos.symbol).first()
+                if db_plan:
                     self.active_trade_plan = {
-                        "side": plan.side,
-                        "setup_type": plan.setup_type,
-                        "entry_reason": plan.entry_reason,
-                        "entry_zone_low": plan.entry_zone_low,
-                        "entry_zone_high": plan.entry_zone_high,
-                        "invalidation_price": plan.invalidation_price,
-                        "original_stop_loss": plan.original_stop_loss,
-                        "original_take_profit": plan.original_take_profit,
-                        "original_first_obstacle": plan.original_first_obstacle,
-                        "market_regime": plan.market_regime,
-                        "created_at": plan.created_at.isoformat()
+                        "side": db_plan.side,
+                        "setup_type": db_plan.setup_type,
+                        "entry_reason": db_plan.entry_reason,
+                        "entry_zone_low": db_plan.entry_zone_low,
+                        "entry_zone_high": db_plan.entry_zone_high,
+                        "invalidation_price": db_plan.invalidation_price,
+                        "original_stop_loss": db_plan.original_stop_loss,
+                        "original_take_profit": db_plan.original_take_profit,
+                        "original_first_obstacle": db_plan.original_first_obstacle,
+                        "market_regime": db_plan.market_regime,
+                        "created_at": db_plan.created_at.isoformat()
                     }
+
         except Exception as e:
             logger.error(f"Error loading state: {e}")
         finally:
@@ -303,6 +304,7 @@ class LocalPaperExecutor:
             return
 
         pos = self.position
+        symbol = pos["symbol"]
         side = pos["side"]
         entry = pos["entry_price"]
         quantity = pos["quantity"]
@@ -354,6 +356,7 @@ class LocalPaperExecutor:
             return
 
         pos = self.position
+        symbol = pos["symbol"]
         side = pos["side"]
         entry = pos["entry_price"]
         quantity = pos["quantity"]
@@ -403,11 +406,6 @@ class LocalPaperExecutor:
             if db_pos:
                 db.delete(db_pos)
 
-            # Cleanup Active Trade Plan when closed
-            db_plan = db.query(ActiveTradePlan).filter(ActiveTradePlan.symbol == pos["symbol"]).first()
-            if db_plan:
-                db.delete(db_plan)
-
             db_trade = db.query(Trade).filter(Trade.status == "OPEN").first()
             if db_trade:
                 db_trade.status = "CLOSED"
@@ -415,6 +413,11 @@ class LocalPaperExecutor:
                 db_trade.exit_timestamp = datetime.utcnow()
                 db_trade.realized_pnl = full_net_pnl
                 db_trade.trading_fees = total_trade_fees
+
+            db_plan = db.query(ActiveTradePlan).filter(ActiveTradePlan.symbol == symbol).first()
+            if db_plan:
+                db.delete(db_plan)
+
             db.commit()
         except Exception as e:
             logger.error(f"Failed to persist closed position: {e}")

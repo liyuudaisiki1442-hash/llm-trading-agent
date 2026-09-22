@@ -124,7 +124,12 @@ class TradingBot:
                     for d in reversed(db_recent_decisions):
                         recent_decisions.append({
                             "action": d.action,
+                            "confidence": d.confidence,
                             "setup_type": d.setup_type,
+                            "entry_zone_low": d.entry_zone_low,
+                            "entry_zone_high": d.entry_zone_high,
+                            "invalidation_price": d.invalidation_price,
+                            "first_obstacle": d.first_obstacle,
                             "reasoning_summary": d.reasoning_summary,
                             "timestamp": d.timestamp.isoformat()
                         })

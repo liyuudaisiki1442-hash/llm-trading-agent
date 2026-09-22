@@ -20,7 +20,12 @@ async def test_recent_decision_loading(isolated_test_db, monkeypatch):
         d = Decision(
             symbol="BTCUSDT",
             action="WAIT",
-            confidence=0.5,
+            confidence=0.5 + (i * 0.1),
+            setup_type=f"Setup {i}",
+            entry_zone_low=49000 + i,
+            entry_zone_high=50000 + i,
+            invalidation_price=48000 + i,
+            first_obstacle=51000 + i,
             reasoning_summary=f"Decision {i}",
             timestamp=now + timedelta(seconds=i),
             is_valid=True
@@ -48,8 +53,25 @@ async def test_recent_decision_loading(isolated_test_db, monkeypatch):
     recent_decisions = ctx.get("recent_decisions", [])
     assert len(recent_decisions) == 5
 
-    assert recent_decisions[-1]["reasoning_summary"] == "Decision 5"
-    assert recent_decisions[0]["reasoning_summary"] == "Decision 1"
+    # Check chronological order and specific fields for last element (chronologically newest)
+    last_decision = recent_decisions[-1]
+    assert last_decision["reasoning_summary"] == "Decision 5"
+    assert last_decision["confidence"] == 1.0
+    assert last_decision["setup_type"] == "Setup 5"
+    assert last_decision["entry_zone_low"] == 49005
+    assert last_decision["entry_zone_high"] == 50005
+    assert last_decision["invalidation_price"] == 48005
+    assert last_decision["first_obstacle"] == 51005
+
+    # Check first element (chronologically oldest retained)
+    first_decision = recent_decisions[0]
+    assert first_decision["reasoning_summary"] == "Decision 1"
+    assert first_decision["confidence"] == 0.6
+    assert first_decision["setup_type"] == "Setup 1"
+    assert first_decision["entry_zone_low"] == 49001
+    assert first_decision["entry_zone_high"] == 50001
+    assert first_decision["invalidation_price"] == 48001
+    assert first_decision["first_obstacle"] == 51001
 
 @pytest.mark.asyncio
 async def test_active_trade_plan_lifecycle(isolated_test_db):

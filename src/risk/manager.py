@@ -149,7 +149,12 @@ class RiskManager:
             "stop_loss": stop_loss,
             "take_profit": take_profit,
             "risk_reward": rr_ratio,
-            "risk_amount": risk_amount
+            "risk_amount": risk_amount,
+            "setup_type": decision.setup_type,
+            "entry_reason": decision.entry_reason,
+            "invalidation_price": decision.invalidation_price,
+            "first_obstacle": decision.first_obstacle,
+            "market_regime": decision.market_regime
         }
 
         return True, "Approved", execution_params

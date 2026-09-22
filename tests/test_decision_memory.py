@@ -120,3 +120,69 @@ def test_legacy_position_compatibility(isolated_test_db):
     executor = LocalPaperExecutor(initial_balance=10000.0)
     assert executor.position is not None
     assert executor.active_trade_plan is None # Safely handled
+
+from src.risk.manager import RiskManager
+from src.agent.schemas import TradeDecision
+from src.features.market_context import MarketContext, PositionState, TimeframeContext
+
+def test_risk_manager_to_executor_passthrough(isolated_test_db):
+    import src.execution.executor as executor_module
+    db = executor_module.SessionLocal()
+    db.query(Position).delete()
+    db.query(Trade).delete()
+    db.query(ActiveTradePlan).delete()
+    db.commit()
+
+    decision = TradeDecision(
+        action="LONG",
+        confidence=0.9,
+        setup_type="Breakout Retest",
+        entry_reason="Testing passthrough",
+        entry_zone={"low": 49000, "high": 50000},
+        invalidation_price=48000,
+        stop_loss=48500,
+        take_profit_targets=[55000],
+        first_obstacle=52000,
+        market_regime="Uptrend Volatile",
+        reasoning_summary="Because testing",
+        warnings=[]
+    )
+
+    ctx = MarketContext(
+        symbol="BTCUSDT",
+        position_state=PositionState(has_position=False),
+        tf_1h=TimeframeContext(timeframe="1H", trend="UP", current_price=49500),
+        tf_15m=TimeframeContext(timeframe="15M", trend="UP", current_price=49500),
+        tf_5m=TimeframeContext(timeframe="5M", trend="UP", current_price=49500)
+    )
+
+    rm = RiskManager()
+    is_approved, _, params = rm.calculate_position(decision, ctx, 10000.0)
+    assert is_approved
+
+    # Verify RiskManager correctly populated the fields
+    assert params["setup_type"] == "Breakout Retest"
+    assert params["entry_reason"] == "Testing passthrough"
+    assert params["invalidation_price"] == 48000
+    assert params["first_obstacle"] == 52000
+    assert params["market_regime"] == "Uptrend Volatile"
+
+    # Pass to executor
+    executor = LocalPaperExecutor(initial_balance=10000.0)
+    executor.execute_params(params)
+    executor.update_price(49500)
+
+    # Assert DB is correctly loaded
+    plan = db.query(ActiveTradePlan).first()
+    assert plan is not None
+    assert plan.setup_type == "Breakout Retest"
+    assert plan.entry_reason == "Testing passthrough"
+    assert plan.invalidation_price == 48000
+    assert plan.original_first_obstacle == 52000
+    assert plan.market_regime == "Uptrend Volatile"
+    assert plan.original_stop_loss == 48500
+    assert plan.original_take_profit == 55000
+    assert plan.entry_zone_low == 49000
+    assert plan.entry_zone_high == 50000
+
+    db.close()

@@ -9,6 +9,8 @@ TRADING PHILOSOPHY:
 4. Avoid chasing price. Avoid entering immediately after an extended impulsive move when reward-to-risk is poor.
 5. Prefer pullback, retest, breakout-retest, or structurally justified entries.
 
+- Support/resistance contact alone is not confirmation.
+
 TEMPORAL CONSISTENCY:
 - `recent_decisions` show your previous conclusions; use them as context, not unquestionable truth. They are previous model outputs and do not prove that a trade was executed. `position_state` and `active_trade_plan` are the source of truth for actual execution state.
 - Do not reverse a previous WAIT condition without identifying what NEW market evidence now satisfies or invalidates that condition.

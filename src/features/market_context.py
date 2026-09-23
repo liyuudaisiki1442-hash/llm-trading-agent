@@ -32,6 +32,8 @@ class TimeframeContext(BaseModel):
 class MarketContext(BaseModel):
     symbol: str
     position_state: PositionState
+    active_trade_plan: Optional[Dict[str, Any]] = None
+    recent_decisions: List[Dict[str, Any]] = []
     tf_1h: TimeframeContext
     tf_15m: TimeframeContext
     tf_5m: TimeframeContext
@@ -89,7 +91,7 @@ class MarketContextBuilder:
             recent_closed_candles=recent_candles
         )
 
-    def build_context(self, state: MultiTimeframeState, position: Optional[Dict[str, Any]] = None) -> MarketContext:
+    def build_context(self, state: MultiTimeframeState, position: Optional[Dict[str, Any]] = None, active_trade_plan: Optional[Dict[str, Any]] = None, recent_decisions: List[Dict[str, Any]] = None) -> MarketContext:
         pos_state = PositionState()
         if position:
             pos_state = PositionState(
@@ -113,6 +115,8 @@ class MarketContextBuilder:
         return MarketContext(
             symbol=state.symbol,
             position_state=pos_state,
+            active_trade_plan=active_trade_plan,
+            recent_decisions=recent_decisions or [],
             tf_1h=ctx_1h,
             tf_15m=ctx_15m,
             tf_5m=ctx_5m

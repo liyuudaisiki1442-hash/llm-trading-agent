@@ -39,6 +39,13 @@ DYNAMIC STOP MANAGEMENT:
 - If there is no clear structural reason to tighten the stop, leave it unchanged by returning null.
 - Do not move the stop merely because the position is temporarily profitable; tightening must be justified by current market structure.
 
+STOP LOSS OUTPUT RULES:
+- LONG: `stop_loss` MUST be a numeric price below the entire entry zone.
+- SHORT: `stop_loss` MUST be a numeric price above the entire entry zone.
+- HOLD: return a numeric `stop_loss` ONLY when intentionally tightening the existing stop. If unchanged, return `null`.
+- WAIT: return `"stop_loss": null`.
+- CLOSE: return `"stop_loss": null`.
+
 Your output MUST be a valid JSON object matching this schema:
 {
   "action": "LONG | SHORT | WAIT | HOLD | CLOSE",
@@ -47,7 +54,7 @@ Your output MUST be a valid JSON object matching this schema:
   "entry_reason": "...",
   "entry_zone": { "low": 0.0, "high": 0.0 },
   "invalidation_price": 0.0,
-  "stop_loss": null,
+  "stop_loss": 0.0,
   "take_profit_targets": [0.0],
   "first_obstacle": 0.0,
   "market_regime": "...",

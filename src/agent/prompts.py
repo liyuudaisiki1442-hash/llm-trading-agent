@@ -29,6 +29,16 @@ ACTION SEMANTICS:
   - Valid actions: "HOLD", "CLOSE".
   - Invalid actions: "WAIT", "LONG", "SHORT". (Do NOT automatically reverse positions).
 
+DYNAMIC STOP MANAGEMENT:
+- When HOLDing an existing position, only provide `stop_loss` when intentionally tightening the current stop to a new valid risk-reducing level.
+- If the existing stop should remain unchanged, return `"stop_loss": null`.
+- Never repeat the current stop merely to indicate that it should remain in place.
+- Never widen the stop.
+- For LONG positions, a tightened stop must be higher than the current stop and still below the current market price.
+- For SHORT positions, a tightened stop must be lower than the current stop and still above the current market price.
+- If there is no clear structural reason to tighten the stop, leave it unchanged by returning null.
+- Do not move the stop merely because the position is temporarily profitable; tightening must be justified by current market structure.
+
 Your output MUST be a valid JSON object matching this schema:
 {
   "action": "LONG | SHORT | WAIT | HOLD | CLOSE",
@@ -37,7 +47,7 @@ Your output MUST be a valid JSON object matching this schema:
   "entry_reason": "...",
   "entry_zone": { "low": 0.0, "high": 0.0 },
   "invalidation_price": 0.0,
-  "stop_loss": 0.0,
+  "stop_loss": null,
   "take_profit_targets": [0.0],
   "first_obstacle": 0.0,
   "market_regime": "...",

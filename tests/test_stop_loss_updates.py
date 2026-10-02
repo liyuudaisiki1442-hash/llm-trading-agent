@@ -143,3 +143,42 @@ def test_stop_loss_unknown_side(isolated_test_db):
     exec.position["side"] = "UNKNOWN_SIDE"
     exec.update_stop_loss(49500, 51000)
     assert exec.position["stop_loss"] == 49000
+
+@pytest.mark.asyncio
+async def test_stop_loss_null_hold(isolated_test_db):
+    from src.main import TradingBot
+    from src.agent.schemas import TradeDecision
+    import unittest.mock
+
+    bot = TradingBot()
+    bot.executor = LocalPaperExecutor(initial_balance=10000)
+    params = {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "quantity": 0.1,
+        "leverage": 1,
+        "entry_zone": {"low": 50000, "high": 50000},
+        "stop_loss": 49000,
+        "take_profit": 55000
+    }
+    bot.executor.execute_params(params)
+    bot.executor.update_price(50000) # Open position
+
+    assert bot.executor.position["stop_loss"] == 49000
+
+    # Mock the LLM to return HOLD with null stop_loss
+    mock_decision = TradeDecision(
+        action="HOLD",
+        confidence=0.9,
+        reasoning_summary="Holding because market looks good",
+        stop_loss=None
+    )
+    bot.llm_client.get_decision = unittest.mock.AsyncMock(return_value=mock_decision)
+
+    # Spy on update_stop_loss
+    with unittest.mock.patch.object(bot.executor, 'update_stop_loss') as mock_update_sl:
+        await bot.run_decision_cycle()
+        mock_update_sl.assert_not_called()
+
+    # Verify stop loss is unchanged
+    assert bot.executor.position["stop_loss"] == 49000
